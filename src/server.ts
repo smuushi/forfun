@@ -9,13 +9,29 @@ export async function startServer() {
   try {
     console.log("Starting server function...");
     const app = express();
-    const port = 3000;
+    const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+
+    // Add logging middleware
+    app.use((req, res, next) => {
+      console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
+      next();
+    });
 
     app.use(express.json());
     app.use(cors());
 
     console.log("Setting up Ollama chat...");
     const chat = new OllamaChat();
+
+    // Health check endpoint
+    app.get("/health", (req, res) => {
+      res.json({
+        status: "ok",
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        port,
+      });
+    });
 
     // Get local IP address
     const getLocalIP = () => {
@@ -65,11 +81,14 @@ export async function startServer() {
     });
 
     const localIP = getLocalIP();
-    console.log("Starting server on port", port);
+    console.log(`Starting server on port ${port}`);
 
     return new Promise<void>((resolve) => {
       app.listen(port, "0.0.0.0", () => {
         console.log(`Server running at http://${localIP}:${port}`);
+        console.log(
+          `Health check available at http://${localIP}:${port}/health`
+        );
         resolve();
       });
     });
