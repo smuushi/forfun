@@ -50,11 +50,30 @@ export async function startServer() {
     app.post("/chat", async (req, res) => {
       try {
         const { message, conversationId } = req.body;
+
+        // Check if Ollama is running
+        try {
+          const ollamaHealth = await fetch("http://localhost:11434/api/tags");
+          if (!ollamaHealth.ok) {
+            throw new Error("Ollama is not responding");
+          }
+        } catch (error) {
+          console.error("Ollama service error:", error);
+          res.status(503).json({
+            error: "Ollama service is not available",
+            details: error instanceof Error ? error.message : "Unknown error",
+          });
+          return;
+        }
+
         const conversation = await chat.chat(message, conversationId);
         res.json(conversation);
       } catch (error) {
         console.error("Error in chat:", error);
-        res.status(500).json({ error: "Failed to process chat request" });
+        res.status(500).json({
+          error: "Failed to process chat request",
+          details: error instanceof Error ? error.message : "Unknown error",
+        });
       }
     });
 
