@@ -80,28 +80,56 @@ export class ChatClient {
         // Add a delay between messages to make it more readable
         await new Promise((resolve) => setTimeout(resolve, 2000));
 
-        // Send message to current server
-        const response1 = await this.sendMessage(currentPrompt);
-        const reply1 =
-          response1.messages[response1.messages.length - 1].content;
-        console.log("\nServer 1:", reply1);
+        console.log(`\nSending to ${this.currentServer}...`);
+        try {
+          // Send message to current server
+          const response1 = await this.sendMessage(currentPrompt);
+          if (!response1?.messages?.length) {
+            console.error("Invalid response from server:", response1);
+            break;
+          }
+          const reply1 =
+            response1.messages[response1.messages.length - 1].content;
+          console.log(`\n${this.currentServer} says:`, reply1);
 
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+          await new Promise((resolve) => setTimeout(resolve, 2000));
 
-        // Switch servers
-        const otherServer =
-          this.currentServer === "default" ? "remote" : "default";
-        this.currentServer = otherServer;
+          // Switch servers
+          const otherServer =
+            this.currentServer === "default" ? "remote" : "default";
+          const otherUrl = this.servers.get(otherServer);
+          if (!otherUrl) {
+            console.error(`Cannot find URL for server: ${otherServer}`);
+            break;
+          }
 
-        // Send the reply to the other server
-        const response2 = await this.sendMessage(reply1);
-        const reply2 =
-          response2.messages[response2.messages.length - 1].content;
-        console.log("\nServer 2:", reply2);
+          // Check if other server is healthy before switching
+          const isHealthy = await this.checkServerHealth(otherUrl);
+          if (!isHealthy) {
+            console.error(`Server ${otherServer} is not responding`);
+            break;
+          }
 
-        // Update the prompt for the next iteration
-        currentPrompt = reply2;
-        messageCount++;
+          this.currentServer = otherServer;
+          console.log(`\nSending to ${this.currentServer}...`);
+
+          // Send the reply to the other server
+          const response2 = await this.sendMessage(reply1);
+          if (!response2?.messages?.length) {
+            console.error("Invalid response from server:", response2);
+            break;
+          }
+          const reply2 =
+            response2.messages[response2.messages.length - 1].content;
+          console.log(`\n${this.currentServer} says:`, reply2);
+
+          // Update the prompt for the next iteration
+          currentPrompt = reply2;
+          messageCount++;
+        } catch (error) {
+          console.error(`Error during message exchange:`, error);
+          break;
+        }
       }
     } catch (error) {
       console.error("Error in auto-chat:", error);
@@ -148,6 +176,32 @@ export class ChatClient {
           this.askQuestion();
           return;
         }
+
+        // Verify both servers are healthy
+        const defaultUrl = this.servers.get("default");
+        const remoteUrl = this.servers.get("remote");
+
+        if (!defaultUrl || !remoteUrl) {
+          console.log("Both default and remote servers must be connected");
+          this.askQuestion();
+          return;
+        }
+
+        const [defaultHealth, remoteHealth] = await Promise.all([
+          this.checkServerHealth(defaultUrl),
+          this.checkServerHealth(remoteUrl),
+        ]);
+
+        if (!defaultHealth || !remoteHealth) {
+          console.log("Both servers must be online to start auto-chat");
+          console.log(
+            `Default server: ${defaultHealth ? "online" : "offline"}`
+          );
+          console.log(`Remote server: ${remoteHealth ? "online" : "offline"}`);
+          this.askQuestion();
+          return;
+        }
+
         await this.startAutoChat(prompt);
         return;
       }
