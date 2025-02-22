@@ -6,24 +6,9 @@ import {
   readdirSync,
 } from "fs";
 import path from "path";
+import { Message, Conversation } from "./types.js";
 
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-  timestamp: string;
-}
-
-interface Conversation {
-  id: string;
-  messages: Message[];
-  metadata: {
-    model: string;
-    created: string;
-    title?: string;
-  };
-}
-
-class OllamaChat {
+export class OllamaChat {
   private historyDir: string;
   private model: string;
 
@@ -76,24 +61,20 @@ class OllamaChat {
       };
     }
 
-    // Add user message
     conversation.messages.push({
       role: "user",
       content: message,
       timestamp: new Date().toISOString(),
     });
 
-    // Get model response
     const response = await this.generateResponse(message);
 
-    // Add assistant message
     conversation.messages.push({
       role: "assistant",
       content: response,
       timestamp: new Date().toISOString(),
     });
 
-    // Save conversation
     this.saveConversation(conversation);
 
     return conversation;
@@ -122,5 +103,3 @@ class OllamaChat {
       : [];
   }
 }
-
-export default OllamaChat;

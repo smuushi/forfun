@@ -1,7 +1,7 @@
 import readline from "readline";
-import { Message, Conversation } from "./types";
+import { Message, Conversation } from "./types.js";
 
-class ChatClient {
+export class ChatClient {
   private serverUrl: string;
   private rl: readline.Interface;
   private currentConversationId?: string;
@@ -107,5 +107,3 @@ class ChatClient {
     askQuestion();
   }
 }
-
-export default ChatClient;
