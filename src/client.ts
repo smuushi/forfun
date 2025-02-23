@@ -74,60 +74,99 @@ export class ChatClient {
     let currentPrompt = initialPrompt;
     let messageCount = 0;
     const maxMessages = 20; // Prevent infinite conversations
+    const maxRetries = 3; // Maximum number of retries for failed responses
+    const seenResponses = new Set<string>(); // Track unique responses
 
     try {
       while (this.isAutoChatting && messageCount < maxMessages) {
-        // Add a delay between messages to make it more readable
         await new Promise((resolve) => setTimeout(resolve, 2000));
 
-        console.log(`\nSending to ${this.currentServer}...`);
-        try {
-          // Send message to current server
-          const response1 = await this.sendMessage(currentPrompt);
-          if (!response1?.messages?.length) {
-            console.error("Invalid response from server:", response1);
-            break;
-          }
-          const reply1 =
-            response1.messages[response1.messages.length - 1].content;
-          console.log(`\n${this.currentServer} says:`, reply1);
+        let retryCount = 0;
+        let success = false;
 
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-
-          // Switch servers
-          const otherServer =
-            this.currentServer === "default" ? "remote" : "default";
-          const otherUrl = this.servers.get(otherServer);
-          if (!otherUrl) {
-            console.error(`Cannot find URL for server: ${otherServer}`);
-            break;
-          }
-
-          // Check if other server is healthy before switching
-          const isHealthy = await this.checkServerHealth(otherUrl);
-          if (!isHealthy) {
-            console.error(`Server ${otherServer} is not responding`);
-            break;
-          }
-
-          this.currentServer = otherServer;
+        while (retryCount < maxRetries && !success) {
           console.log(`\nSending to ${this.currentServer}...`);
+          try {
+            const response1 = await this.sendMessage(currentPrompt);
+            if (!response1?.messages?.length) {
+              throw new Error("Invalid response from server");
+            }
 
-          // Send the reply to the other server
-          const response2 = await this.sendMessage(reply1);
-          if (!response2?.messages?.length) {
-            console.error("Invalid response from server:", response2);
-            break;
+            const reply1 =
+              response1.messages[response1.messages.length - 1].content;
+
+            // Check if we've seen this response before
+            if (seenResponses.has(reply1)) {
+              console.log("\nDetected repetitive response. Changing topic...");
+              currentPrompt =
+                "Let's talk about something different. Tell me about an interesting scientific discovery.";
+              retryCount++;
+              continue;
+            }
+
+            seenResponses.add(reply1);
+            console.log(`\n${this.currentServer} says:`, reply1);
+            success = true;
+
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+
+            // Switch servers
+            const otherServer =
+              this.currentServer === "default" ? "remote" : "default";
+            const otherUrl = this.servers.get(otherServer);
+            if (!otherUrl) {
+              throw new Error(`Cannot find URL for server: ${otherServer}`);
+            }
+
+            // Check if other server is healthy before switching
+            const isHealthy = await this.checkServerHealth(otherUrl);
+            if (!isHealthy) {
+              throw new Error(`Server ${otherServer} is not responding`);
+            }
+
+            this.currentServer = otherServer;
+            console.log(`\nSending to ${this.currentServer}...`);
+
+            const response2 = await this.sendMessage(reply1);
+            if (!response2?.messages?.length) {
+              throw new Error("Invalid response from server");
+            }
+
+            const reply2 =
+              response2.messages[response2.messages.length - 1].content;
+
+            // Check for repetitive responses
+            if (seenResponses.has(reply2)) {
+              console.log("\nDetected repetitive response. Changing topic...");
+              currentPrompt =
+                "Let's explore a different topic. What's your take on recent technological advancements?";
+              continue;
+            }
+
+            seenResponses.add(reply2);
+            console.log(`\n${this.currentServer} says:`, reply2);
+            currentPrompt = reply2;
+            messageCount++;
+          } catch (error) {
+            console.error(
+              `Error during message exchange (attempt ${
+                retryCount + 1
+              }/${maxRetries}):`,
+              error
+            );
+            retryCount++;
+            if (retryCount === maxRetries) {
+              console.log("\nMax retries reached. Ending auto-chat session.");
+              this.isAutoChatting = false;
+              break;
+            }
+            await new Promise((resolve) =>
+              setTimeout(resolve, 1000 * retryCount)
+            ); // Exponential backoff
           }
-          const reply2 =
-            response2.messages[response2.messages.length - 1].content;
-          console.log(`\n${this.currentServer} says:`, reply2);
+        }
 
-          // Update the prompt for the next iteration
-          currentPrompt = reply2;
-          messageCount++;
-        } catch (error) {
-          console.error(`Error during message exchange:`, error);
+        if (!success) {
           break;
         }
       }
