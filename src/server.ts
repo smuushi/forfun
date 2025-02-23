@@ -37,13 +37,19 @@ export async function startServer() {
     const getLocalIP = () => {
       const nets = networkInterfaces();
       for (const name of Object.keys(nets)) {
+        // Skip WSL and virtual interfaces
+        if (name.includes('WSL') || name.includes('vEthernet')) {
+          continue;
+        }
+        
         for (const net of nets[name] ?? []) {
-          if (net.family === "IPv4" && !net.internal) {
+          // Look for IPv4 addresses that start with 192.168
+          if (net.family === 'IPv4' && !net.internal && net.address.startsWith('192.168')) {
             return net.address;
           }
         }
       }
-      return "localhost";
+      return 'localhost';
     };
 
     // Chat endpoint

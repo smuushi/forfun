@@ -12,7 +12,7 @@ export class OllamaChat {
   private historyDir: string;
   private model: string;
 
-  constructor(model = "deepseek-r1:8b") {
+  constructor(model = "deepseek-r1:14b") {
     this.model = model;
     this.historyDir = path.join(process.cwd(), "history");
 
@@ -23,24 +23,39 @@ export class OllamaChat {
 
   private async generateResponse(prompt: string): Promise<string> {
     try {
+      // First check if Ollama is running
+      const healthCheck = await fetch("http://localhost:11434/api/tags");
+      if (!healthCheck.ok) {
+        throw new Error("Ollama service is not running");
+      }
+
       const response = await fetch("http://localhost:11434/api/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           model: this.model,
-          prompt,
-          stream: false,
+          prompt: prompt,
+          stream: false  // Add this to get a single JSON response instead of stream
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json();
-      return data.response;
+      const text = await response.text();  // Get raw text first
+      try {
+        const data = JSON.parse(text);  // Then parse it
+        return data.response;
+      } catch (parseError) {
+        throw new Error(`Failed to parse Ollama response: ${text.slice(0, 100)}...`);
+      }
     } catch (error) {
-      console.error("Error generating response:", error);
+      if (error instanceof Error) {
+        throw new Error(`Failed to generate response: ${error.message}`);
+      }
       throw error;
     }
   }
