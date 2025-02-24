@@ -12,7 +12,7 @@ export class OllamaChat {
   private historyDir: string;
   private model: string;
 
-  constructor(model = "deepseek-r1:14b") {
+  constructor(model = "deepseek-r1:8b") {
     this.model = model;
     this.historyDir = path.join(process.cwd(), "history");
 
@@ -37,20 +37,24 @@ export class OllamaChat {
         body: JSON.stringify({
           model: this.model,
           prompt: prompt,
-          stream: false  // Add this to get a single JSON response instead of stream
+          stream: false, // Add this to get a single JSON response instead of stream
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
+        throw new Error(
+          `Ollama API error: ${response.status} ${response.statusText}`
+        );
       }
 
-      const text = await response.text();  // Get raw text first
+      const text = await response.text(); // Get raw text first
       try {
-        const data = JSON.parse(text);  // Then parse it
+        const data = JSON.parse(text); // Then parse it
         return data.response;
       } catch (parseError) {
-        throw new Error(`Failed to parse Ollama response: ${text.slice(0, 100)}...`);
+        throw new Error(
+          `Failed to parse Ollama response: ${text.slice(0, 100)}...`
+        );
       }
     } catch (error) {
       if (error instanceof Error) {

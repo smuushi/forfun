@@ -38,26 +38,67 @@ export class ChatClient {
   }
 
   private async sendMessage(message: string): Promise<Conversation> {
-    const response = await fetch(
-      `${this.servers.get(this.currentServer)}/chat`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          message,
-          conversationId: this.currentConversationId,
-        }),
+    try {
+      // Strip out thinking tags from the message
+      const cleanedMessage = message
+        .replace(/<think>[\s\S]*?<\/think>/g, "")
+        .replace(/<think>/g, "")
+        .replace(/<\/think>/g, "")
+        .trim();
+
+      const response = await fetch(
+        `${this.servers.get(this.currentServer)}/chat`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            message: cleanedMessage,
+            conversationId: this.currentConversationId,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        console.error("Server responded with status:", response.status);
+        console.error("Status text:", response.statusText);
+        const errorText = await response.text();
+        console.error("Error response:", errorText);
+        throw new Error(`Server responded with status ${response.status}`);
       }
-    );
-    return response.json();
+
+      const data = await response.json();
+
+      // Also clean any thinking tags from the response
+      if (data.messages && Array.isArray(data.messages)) {
+        data.messages = data.messages.map((msg: Message) => ({
+          ...msg,
+          content: msg.content
+            .replace(/<think>[\s\S]*?<\/think>/g, "")
+            .replace(/<think>/g, "")
+            .replace(/<\/think>/g, "")
+            .trim(),
+        }));
+      }
+
+      console.log("Server response:", JSON.stringify(data, null, 2));
+      return data;
+    } catch (error) {
+      console.error("Network or parsing error:", error);
+      throw error;
+    }
   }
 
   private async checkServerHealth(url: string): Promise<boolean> {
     try {
       const response = await fetch(`${url}/health`);
-      return response.ok;
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`Server at ${url} is using model: ${data.model}`);
+        return true;
+      }
+      return false;
     } catch (error) {
       return false;
     }
@@ -76,6 +117,14 @@ export class ChatClient {
     const maxMessages = 20; // Prevent infinite conversations
     const maxRetries = 3; // Maximum number of retries for failed responses
     const seenResponses = new Set<string>(); // Track unique responses
+
+    // Create a new conversation at the start
+    const initialResponse = await this.sendMessage(initialPrompt);
+    this.currentConversationId = initialResponse.id;
+    console.log(
+      "Created new conversation with ID:",
+      this.currentConversationId
+    );
 
     try {
       while (this.isAutoChatting && messageCount < maxMessages) {
@@ -110,7 +159,7 @@ export class ChatClient {
 
             await new Promise((resolve) => setTimeout(resolve, 2000));
 
-            // Switch servers
+            // Switch servers but maintain the same conversation ID
             const otherServer =
               this.currentServer === "default" ? "remote" : "default";
             const otherUrl = this.servers.get(otherServer);
@@ -176,6 +225,7 @@ export class ChatClient {
 
     this.isAutoChatting = false;
     console.log("\nAuto-chat session ended.");
+    console.log("Conversation saved with ID:", this.currentConversationId);
     this.askQuestion();
   }
 

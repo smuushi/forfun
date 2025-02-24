@@ -10,6 +10,9 @@ export async function startServer() {
     console.log("Starting server function...");
     const app = express();
     const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+    const model = process.env.MODEL || "deepseek-r1:8b";
+
+    console.log(`Using model: ${model}`);
 
     // Add logging middleware
     app.use((req, res, next) => {
@@ -21,15 +24,16 @@ export async function startServer() {
     app.use(cors());
 
     console.log("Setting up Ollama chat...");
-    const chat = new OllamaChat();
+    const chat = new OllamaChat(model);
 
-    // Health check endpoint
+    // Health check endpoint with model info
     app.get("/health", (req, res) => {
       res.json({
         status: "ok",
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
         port,
+        model,
       });
     });
 
@@ -38,18 +42,22 @@ export async function startServer() {
       const nets = networkInterfaces();
       for (const name of Object.keys(nets)) {
         // Skip WSL and virtual interfaces
-        if (name.includes('WSL') || name.includes('vEthernet')) {
+        if (name.includes("WSL") || name.includes("vEthernet")) {
           continue;
         }
-        
+
         for (const net of nets[name] ?? []) {
           // Look for IPv4 addresses that start with 192.168
-          if (net.family === 'IPv4' && !net.internal && net.address.startsWith('192.168')) {
+          if (
+            net.family === "IPv4" &&
+            !net.internal &&
+            net.address.startsWith("192.168")
+          ) {
             return net.address;
           }
         }
       }
-      return 'localhost';
+      return "localhost";
     };
 
     // Chat endpoint
